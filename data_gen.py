@@ -13,7 +13,7 @@ import polars as pl
 import numpy as np
 from pathlib import Path
 
-ZARR_PATH = Path("universal_manipulation_interface/data/raw/cup_in_the_wild.zarr")
+ZARR_PATH = Path("data/raw/cup_in_the_wild.zarr")
 DATA_DIR = Path("data")
 SMALL_MANY = DATA_DIR / "small_many"
 LARGE_FEW = DATA_DIR / "large_few"
@@ -21,9 +21,15 @@ MAX_EPISODES = 50  # subset for speed
 
 
 def discover_keys(root: zarr.Group) -> dict[str, tuple]:
-    """List all data arrays and their shapes."""
+    """List all data arrays and their shapes, skipping unavailable codecs."""
     data_grp = root["data"]
-    return {k: data_grp[k].shape for k in data_grp.array_keys()}
+    result = {}
+    for k in data_grp.array_keys():
+        try:
+            result[k] = data_grp[k].shape
+        except ValueError:
+            print(f"  Skipping {k} (codec unavailable)")
+    return result
 
 
 def extract_umi_to_strategies():

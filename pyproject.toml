@@ -5,6 +5,8 @@ description = "5D benchmark: Ray vs Flink for real-time event detection on Stanf
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "imagecodecs>=2026.1.14",
+    "numcodecs[zfpy,zstd]<0.14",
     "pandas>=3.0.1",
     "polars>=1.38.1",
     "psutil>=7.2.2",
@@ -13,5 +15,5 @@ dependencies = [
     "ray[data,default]>=2.54.0",
     "tqdm>=4.67.3",
     "typer>=0.24.1",
-    "zarr>=3.1.5",
+    "zarr<3",
 ]
