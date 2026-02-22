@@ -1,0 +1,22 @@
+{
+  "mode": "gpu-tensor",
+  "replay_scale": 10000,
+  "n_episodes": 50,
+  "total_rows": 193540000,
+  "total_events": 1530000,
+  "events_by_type": {
+    "grasp": 510000,
+    "lift": 750000,
+    "place": 270000
+  },
+  "load_time_s": 2.3408728980002707,
+  "compute_time_s": 159.73328025999945,
+  "wall_time_s": 162.07415315799972,
+  "rows_per_sec": 1211644.8099292335,
+  "events_per_sec": 9578.467289406464,
+  "latencies_ms": "[50 values]",
+  "p50_latency_ms": 5238.705412999934,
+  "p99_latency_ms": 7538.9555439100595,
+  "cpu_percent": 0.0,
+  "mem_mb": 946.262016
+}

@@ -74,6 +74,80 @@ class HSMDetector:
         self._step_count = 0
         self._last_event_step = -999
 
+    def step_precomputed(
+        self,
+        accel_mag: float,
+        gripper: float,
+        gripper_delta: float,
+        z_accel: float,
+        timestep: int | None = None,
+    ) -> list[Event]:
+        """Fast path: accept pre-computed signal values, skip dict scanning."""
+        ts = timestep if timestep is not None else self._step_count
+        self._step_count += 1
+        new_events: list[Event] = []
+
+        cfg = self.cfg
+        cooldown_ok = (self._step_count - self._last_event_step) > cfg.min_steps_between_events
+
+        if self.phase in (Phase.IDLE, Phase.APPROACHING, Phase.RELEASING) and cooldown_ok:
+            if (gripper_delta < cfg.gripper_closing_delta
+                    and gripper < cfg.gripper_close_thresh):
+                base_conf = min(1.0, abs(gripper_delta) / abs(cfg.gripper_closing_delta * 3))
+                accel_bonus = 0.2 if accel_mag > cfg.accel_spike_thresh else 0.0
+                confidence = min(1.0, base_conf + accel_bonus)
+                ev = Event(
+                    event_type="grasp", timestep=ts, episode_id=self.episode_id,
+                    phase_from=self.phase.name, phase_to=Phase.GRASPING.name,
+                    confidence=confidence,
+                    details={"accel_mag": accel_mag, "gripper": gripper,
+                             "gripper_delta": gripper_delta},
+                )
+                new_events.append(ev)
+                self.phase = Phase.GRASPING
+                self._last_event_step = self._step_count
+
+        if self.phase in (Phase.GRASPING, Phase.TRANSPORTING) and cooldown_ok:
+            if (z_accel > cfg.vertical_accel_thresh
+                    and gripper < cfg.stable_hold_width):
+                confidence = min(1.0, z_accel / (cfg.vertical_accel_thresh * 3))
+                ev = Event(
+                    event_type="lift", timestep=ts, episode_id=self.episode_id,
+                    phase_from=self.phase.name, phase_to=Phase.LIFTING.name,
+                    confidence=confidence,
+                    details={"z_accel": z_accel, "gripper": gripper},
+                )
+                new_events.append(ev)
+                self.phase = Phase.LIFTING
+                self._last_event_step = self._step_count
+
+        if self.phase in (Phase.LIFTING, Phase.TRANSPORTING) and cooldown_ok:
+            if (gripper_delta > cfg.gripper_opening_delta
+                    and gripper > cfg.gripper_open_thresh):
+                base_conf = min(1.0, gripper_delta / (cfg.gripper_opening_delta * 3))
+                decel_bonus = 0.2 if z_accel < cfg.decel_thresh else 0.0
+                confidence = min(1.0, base_conf + decel_bonus)
+                ev = Event(
+                    event_type="place", timestep=ts, episode_id=self.episode_id,
+                    phase_from=self.phase.name, phase_to=Phase.PLACING.name,
+                    confidence=confidence,
+                    details={"z_accel": z_accel, "gripper": gripper,
+                             "gripper_delta": gripper_delta},
+                )
+                new_events.append(ev)
+                self.phase = Phase.IDLE
+                self._last_event_step = self._step_count
+
+        if self.phase == Phase.GRASPING and abs(gripper_delta) < 0.0005:
+            self.phase = Phase.TRANSPORTING
+        if self.phase == Phase.LIFTING and abs(z_accel) < cfg.vertical_accel_thresh * 0.5:
+            self.phase = Phase.TRANSPORTING
+
+        self.prev_gripper = gripper
+        self.prev_accel_mag = accel_mag
+        self.events.extend(new_events)
+        return new_events
+
     def step(self, row: dict[str, float]) -> list[Event]:
         """
         Process one timestep. Returns list of events detected at this step.

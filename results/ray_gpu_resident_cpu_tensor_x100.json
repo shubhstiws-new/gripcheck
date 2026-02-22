@@ -1,0 +1,22 @@
+{
+  "mode": "cpu-tensor",
+  "replay_scale": 100,
+  "n_episodes": 50,
+  "total_rows": 1935400,
+  "total_events": 15300,
+  "events_by_type": {
+    "grasp": 5100,
+    "lift": 7500,
+    "place": 2700
+  },
+  "load_time_s": 0.313134985999568,
+  "compute_time_s": 3.908420288999878,
+  "wall_time_s": 4.221555274999446,
+  "rows_per_sec": 495187.27692800097,
+  "events_per_sec": 3914.6250578683553,
+  "latencies_ms": "[50 values]",
+  "p50_latency_ms": 91.48160150016338,
+  "p99_latency_ms": 143.98746137977466,
+  "cpu_percent": 0.0,
+  "mem_mb": 223.90784
+}
