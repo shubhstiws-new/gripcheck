@@ -233,7 +233,7 @@ def run_ray_batch(strategy: str, gpu: bool = False, replay_scale: int = 1) -> Be
     if not files:
         raise FileNotFoundError(f"No files in {data_dir}. Run data_gen.py first.")
 
-    file_paths = [str(f) for f in files]
+    file_paths = [str(f.resolve()) for f in files]
 
     cpu_before = proc.cpu_percent(interval=None)
     mem_before = proc.memory_info().rss / 1e6

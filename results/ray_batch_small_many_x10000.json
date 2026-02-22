@@ -1,0 +1,21 @@
+{
+  "strategy": "small-many",
+  "replay_scale": 10000,
+  "gpu": false,
+  "n_episodes": 50,
+  "total_rows": 193540000,
+  "total_events": 1530000,
+  "events_by_type": {
+    "grasp": 510000,
+    "lift": 750000,
+    "place": 270000
+  },
+  "wall_time_s": 95.9414884140001,
+  "rows_per_sec": 2017271.1847542902,
+  "events_per_sec": 15947.219761672337,
+  "latencies_ms": "[50 values]",
+  "p50_latency_ms": 44729.09547999984,
+  "p99_latency_ms": 66752.68031872994,
+  "cpu_percent": 0.0,
+  "mem_mb": 196.95616
+}

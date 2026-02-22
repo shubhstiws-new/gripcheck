@@ -43,19 +43,22 @@ class Event:
 # ── Tunable thresholds (calibrated for UMI cup-in-the-wild) ──────────
 @dataclasses.dataclass
 class HSMConfig:
-    # Grasp detection
-    accel_spike_thresh: float = 0.02      # EEF accel magnitude spike
-    gripper_close_thresh: float = 0.06    # gripper width < this → closed
-    gripper_closing_delta: float = -0.002 # gripper narrowing rate
+    # Grasp detection – primary trigger is rapid gripper closure
+    gripper_closing_delta: float = -0.002  # per-step gripper narrowing rate
+    gripper_close_thresh: float = 0.075    # gripper width below this during closure
+    accel_spike_thresh: float = 0.003      # EEF accel mag (boosts confidence, not required)
 
-    # Lift detection
-    vertical_accel_thresh: float = 0.01   # upward accel (z-axis)
-    stable_hold_width: float = 0.06       # gripper width for "holding"
+    # Lift detection – upward z-accel while gripper is closed
+    vertical_accel_thresh: float = 0.002   # upward accel (z-axis)
+    stable_hold_width: float = 0.070       # gripper width for "holding"
 
-    # Place detection
-    decel_thresh: float = -0.01           # negative accel (slowing)
-    gripper_open_thresh: float = 0.07     # gripper width > this → opening
-    gripper_opening_delta: float = 0.002  # gripper widening rate
+    # Place detection – primary trigger is rapid gripper opening
+    gripper_opening_delta: float = 0.002   # per-step gripper widening rate
+    gripper_open_thresh: float = 0.070     # gripper width above this during opening
+    decel_thresh: float = -0.002           # negative z-accel (boosts confidence)
+
+    # Cooldown: min steps between same-type events within an episode
+    min_steps_between_events: int = 20
 
 
 class HSMDetector:
@@ -69,6 +72,7 @@ class HSMDetector:
         self.prev_gripper: float | None = None
         self.prev_accel_mag: float | None = None
         self._step_count = 0
+        self._last_event_step = -999
 
     def step(self, row: dict[str, float]) -> list[Event]:
         """
@@ -108,13 +112,16 @@ class HSMDetector:
 
         # ── State machine transitions ────────────────────────────
         cfg = self.cfg
+        cooldown_ok = (self._step_count - self._last_event_step) > cfg.min_steps_between_events
 
-        if self.phase in (Phase.IDLE, Phase.APPROACHING, Phase.RELEASING):
-            # Detect GRASP: accel spike + gripper closing
-            if (accel_mag > cfg.accel_spike_thresh
-                    and gripper_delta < cfg.gripper_closing_delta
+        if self.phase in (Phase.IDLE, Phase.APPROACHING, Phase.RELEASING) and cooldown_ok:
+            # Detect GRASP: rapid gripper closure is the primary trigger
+            if (gripper_delta < cfg.gripper_closing_delta
                     and gripper < cfg.gripper_close_thresh):
-                confidence = min(1.0, accel_mag / (cfg.accel_spike_thresh * 3))
+                # Accel boosts confidence but is not required
+                base_conf = min(1.0, abs(gripper_delta) / abs(cfg.gripper_closing_delta * 3))
+                accel_bonus = 0.2 if accel_mag > cfg.accel_spike_thresh else 0.0
+                confidence = min(1.0, base_conf + accel_bonus)
                 ev = Event(
                     event_type="grasp",
                     timestep=ts,
@@ -127,9 +134,10 @@ class HSMDetector:
                 )
                 new_events.append(ev)
                 self.phase = Phase.GRASPING
+                self._last_event_step = self._step_count
 
-        if self.phase == Phase.GRASPING:
-            # Detect LIFT: upward accel + stable grip
+        if self.phase in (Phase.GRASPING, Phase.TRANSPORTING) and cooldown_ok:
+            # Detect LIFT: upward z-accel while gripper is closed
             if (z_accel > cfg.vertical_accel_thresh
                     and gripper < cfg.stable_hold_width):
                 confidence = min(1.0, z_accel / (cfg.vertical_accel_thresh * 3))
@@ -144,12 +152,15 @@ class HSMDetector:
                 )
                 new_events.append(ev)
                 self.phase = Phase.LIFTING
+                self._last_event_step = self._step_count
 
-        if self.phase in (Phase.LIFTING, Phase.TRANSPORTING):
-            # Detect PLACE: deceleration + gripper opening
-            if (z_accel < cfg.decel_thresh
-                    and gripper_delta > cfg.gripper_opening_delta):
-                confidence = min(1.0, abs(z_accel) / abs(cfg.decel_thresh * 3))
+        if self.phase in (Phase.LIFTING, Phase.TRANSPORTING) and cooldown_ok:
+            # Detect PLACE: rapid gripper opening is the primary trigger
+            if (gripper_delta > cfg.gripper_opening_delta
+                    and gripper > cfg.gripper_open_thresh):
+                base_conf = min(1.0, gripper_delta / (cfg.gripper_opening_delta * 3))
+                decel_bonus = 0.2 if z_accel < cfg.decel_thresh else 0.0
+                confidence = min(1.0, base_conf + decel_bonus)
                 ev = Event(
                     event_type="place",
                     timestep=ts,
@@ -161,9 +172,8 @@ class HSMDetector:
                              "gripper_delta": gripper_delta},
                 )
                 new_events.append(ev)
-                self.phase = Phase.PLACING
-                # Reset to idle after place for next grasp cycle
                 self.phase = Phase.IDLE
+                self._last_event_step = self._step_count
 
         # Transition GRASPING → TRANSPORTING if holding stable
         if self.phase == Phase.GRASPING and abs(gripper_delta) < 0.0005:
