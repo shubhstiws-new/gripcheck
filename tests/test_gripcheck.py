@@ -7,20 +7,25 @@ from scorer import count_complete_cycles, pattern_score, score_episode
 OPEN, CLOSED = 0.08, 0.03
 
 
-def synthetic_episode(n_steps: int = 60, place: bool = True, lift: bool = True) -> pl.DataFrame:
-    """A scripted pick-and-place: close gripper, lift, carry, lower and release."""
+def synthetic_episode(n_steps: int = 90, place: bool = True, lift: bool = True) -> pl.DataFrame:
+    """A scripted pick-and-place: close gripper, lift, carry, lower and release.
+
+    Events are spaced more than HSMConfig.min_steps_between_events (20) apart.
+    """
     gripper, az, ax = [], [], []
     for t in range(n_steps):
         if t < 10:                      # approach, gripper open
             g, z, x = OPEN, 0.0, 0.0
         elif t < 15:                    # close with an acceleration spike
             g, z, x = OPEN - 0.01 * (t - 9), 0.0, 0.05
-        elif t < 20:                    # lift: upward acceleration, stable grip
-            g, z, x = CLOSED, 0.05 if lift else 0.0, 0.0
-        elif t < 30:                    # carry
+        elif t < 35:                    # settle grip
             g, z, x = CLOSED, 0.0, 0.0
-        elif t < 35 and place:          # lower and release
-            g, z, x = CLOSED + 0.01 * (t - 29), -0.05, 0.0
+        elif t < 40:                    # lift: upward acceleration, stable grip
+            g, z, x = CLOSED, 0.05 if lift else 0.0, 0.0
+        elif t < 60:                    # carry
+            g, z, x = CLOSED, 0.0, 0.0
+        elif t < 65 and place:          # lower and release
+            g, z, x = CLOSED + 0.01 * (t - 59), -0.05, 0.0
         else:
             g, z, x = (OPEN if place else CLOSED), 0.0, 0.0
         gripper.append(g)
@@ -44,7 +49,7 @@ def synthetic_episode(n_steps: int = 60, place: bool = True, lift: bool = True) 
 def test_detects_full_cycle_in_order():
     events = detect_events_batch(synthetic_episode().iter_rows(named=True))
     assert [e.event_type for e in events] == ["grasp", "lift", "place"]
-    assert events[0].timestep == 12  # first step with gripper below the close threshold
+    assert [e.timestep for e in events] == [10, 35, 64]
 
 
 def test_no_events_when_gripper_never_moves():
