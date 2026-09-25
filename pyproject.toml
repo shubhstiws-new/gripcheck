@@ -1,7 +1,7 @@
 [project]
-name = "robotic-umi-event-bench"
+name = "gripcheck"
 version = "0.1.0"
-description = "5D benchmark: Ray vs Flink for real-time event detection on Stanford UMI robotics data"
+description = "Quality scoring for robot manipulation demonstrations (Stanford UMI)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,3 +18,10 @@ dependencies = [
     "typer>=0.24.1",
     "zarr<3",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
